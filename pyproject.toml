@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "daceiver"
+version = "0.0.1"
+authors = [
+  { name="Haoran Li", email="edward.haoran.lee@outlook.com" },
+]
+description = "A small Socket/HTTP asynchronous data receiver."
+readme = "README.md"
+license = { file="LICENSE" }
+requires-python = ">=3.7"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/EdwardHaoranLee/daceiver"
+"Bug Tracker" = "https://github.com/EdwardHaoranLee/daceiver/issues"

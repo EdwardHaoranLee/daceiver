@@ -1,9 +1,11 @@
-from flask import Flask, request
 import socket
-from collections import deque
-from typing import Any, List
+import threading
 from abc import ABC, abstractmethod
-from multiprocessing import Process
+from collections import deque
+from threading import Thread
+from typing import Any, List
+
+from flask import Flask, request
 
 
 class DataQueue(deque):
@@ -26,7 +28,7 @@ class IDataReceiver(ABC):
     def start(self) -> None: pass
 
     @abstractmethod
-    def end(self) -> None: pass
+    def stop(self) -> None: pass
 
     def add(self, data: Any) -> Any:
         self.queue.append(data)
@@ -57,7 +59,6 @@ class IDataReceiver(ABC):
 
 class HTTPReceiver(IDataReceiver, ABC):
     app: Flask
-    server: Process
     successful_msg: str = 'Successfully Added!'
 
     def __init__(self, maxlen: int = None, port: int = 8001, successful_msg: str = None, method: str = 'POST'):
@@ -72,40 +73,60 @@ class HTTPReceiver(IDataReceiver, ABC):
         return self.successful_msg
 
     def start(self) -> None:
-        self.server = Process(target=self.app.run, args=('0.0.0.0', self.port))
-        self.server.start()
-
-    def end(self) -> None:
-        self.server.terminate()
-        self.server.join()
+        self.app.run('0.0.0.0', self.port)
 
 
 class SocketReceiver(IDataReceiver, ABC):
     socket: socket.socket
-    end_character: str
+    end_character: bytes
     block_size: int
 
-    def __init__(self, maxlen: int = None, port: int = 8001, protocol: str = 'UDP', end_character: str = '\03',
-                 block_size: int = 1024):
+    is_running: bool
+    socket_thread: Thread
+    data_lock: threading.Lock
+
+    def __init__(self, maxlen: int = None, port: int = 8001, end_character: bytes = b'\03', block_size: int = 4096):
         super().__init__(maxlen, port)
         self.end_character = end_character
         self.block_size = block_size
-        if protocol == 'UDP':
-            self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        elif protocol == 'TCP':
-            self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+        self.is_running = False
+        self.data_lock = threading.Lock()
 
     def start(self) -> None:
-        self.socket.bind(('', self.port))
-        self.socket.listen()
+        self.is_running = True
+        self.socket.bind(('127.0.0.1', self.port))
+        self.socket.listen(5)
 
+        print('Waiting for socket client to connect...')
+        conn, addr = self.socket.accept()
+
+        print('Socket client from ' + str(addr) + ' is connected on port: ' + str(self.port))
+        self.socket_thread = Thread(target=self.__start_socket_thread, args=(conn,))
+
+    def stop(self) -> None:
+        self.is_running = False
+        self.socket_thread.join()
+
+    def __start_socket_thread(self, conn: socket) -> None:
         msg = b''
 
-        while True:
-            data, _ = self.socket.recvfrom(self.block_size)
+        while self.is_running:
+            data = conn.recv(self.block_size)
+            end_index = data.find(self.end_character)
+            if end_index != -1:
+                msg += data[:end_index]
+                self.data_lock.locked()
+                self.add(msg)
+                self.data_lock.release()
+                msg = data[end_index + len(self.end_character):]
+            else:
+                msg += data
 
+        conn.close()
 
 
 if __name__ == '__main__':
-    extractor = DataExtractor(maxlen=2)
-    extractor.run()
+    receiver = SocketReceiver()
+    receiver.start()
