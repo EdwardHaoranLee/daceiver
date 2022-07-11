@@ -1,5 +1,6 @@
 import random
 import socket
+import time
 import unittest
 import warnings
 from threading import Thread
@@ -67,3 +68,15 @@ class TestSocketReceiverCommunication(unittest.TestCase):
             self.assertEqual(self.receiver.peak_all()[1], msg[:-1])
         else:
             raise IOError()
+
+    def test_performance_60rps_for_10secs(self) -> None:
+        time.sleep(1)
+        pass
+
+    def test_performance_100rps_for_10secs(self) -> None:
+        time.sleep(1)
+        pass
+
+    def test_performance_144rps_for_10secs(self) -> None:
+        time.sleep(1)
+        pass

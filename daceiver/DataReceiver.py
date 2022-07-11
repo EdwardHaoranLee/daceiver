@@ -163,4 +163,3 @@ class SocketReceiver(IDataReceiver, ABC):
 
 if __name__ == '__main__':
     receiver = SocketReceiver()
-    receiver.start()
