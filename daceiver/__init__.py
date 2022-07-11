@@ -1,2 +1,2 @@
-from DataReceiver import IDataReceiver, HTTPReceiver, SocketReceiver
+from daceiver.DataReceiver import IDataReceiver, HTTPReceiver, SocketReceiver
 

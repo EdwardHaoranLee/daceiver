@@ -116,7 +116,7 @@ class SocketReceiver(IDataReceiver, ABC):
     confirmation_msg: bytes
     socket_thread: Thread
 
-    def __init__(self, maxlen: int = None, port: int = 8001, end_character: bytes = b'\03', block_size: int = 4096,
+    def __init__(self, maxlen: int = None, port: int = 8001, end_character: bytes = b'\00', block_size: int = 4096,
                  is_send_confirmation: bool = False, confirmation_msg: bytes = b''):
         super().__init__(maxlen, port)
         self.end_character = end_character
@@ -132,7 +132,7 @@ class SocketReceiver(IDataReceiver, ABC):
         self.socket.bind(('127.0.0.1', self.port))
         self.socket.listen(5)
 
-        print('Waiting for socket client to connect...')
+        print('Waiting for socket client to connect on port ' + str(self.port) + '...')
         conn, addr = self.socket.accept()
 
         print('Socket client from ' + str(addr) + ' is connected on port: ' + str(self.port))
