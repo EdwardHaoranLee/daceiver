@@ -12,17 +12,24 @@ class DataQueue(deque):
     def __init__(self, maxlen: int = None):
         super().__init__(maxlen=maxlen)
 
+    def __str__(self):
+        return super(DataQueue, self).__str__()
+
 
 class IDataReceiver(ABC):
     port: int
     maxlen: int
     queue: DataQueue
 
+    lock: threading.Lock
+
     def __init__(self, maxlen: int = None, port: int = 8001):
         self.port = port
 
         self.maxlen = maxlen
         self.queue = DataQueue(self.maxlen)
+
+        self.lock = threading.Lock()
 
     @abstractmethod
     def start(self) -> None: pass
@@ -31,30 +38,53 @@ class IDataReceiver(ABC):
     def stop(self) -> None: pass
 
     def add(self, data: Any) -> Any:
+        self.lock.acquire()
         self.queue.append(data)
+        self.lock.release()
         return data
 
     def peak_all(self) -> List[Any]:
-        return list(self.queue)
+        self.lock.acquire()
+        result = list(self.queue)
+        self.lock.release()
+        return result
 
     def peak_right(self) -> Any:
-        return self.queue[-1] if len(self.queue) > 0 else None
+        self.lock.acquire()
+        result = self.queue[-1] if len(self.queue) > 0 else None
+        self.lock.release()
+        return result
 
     def peak_left(self) -> Any:
-        return self.queue[0] if len(self.queue) > 0 else None
+        self.lock.acquire()
+        result = self.queue[0] if len(self.queue) > 0 else None
+        self.lock.release()
+        return result
 
     def clear(self) -> bool:
+        self.lock.acquire()
         self.queue.clear()
-        return len(self.queue) == 0
+        is_success = len(self.queue) == 0
+        self.lock.release()
+        return is_success
 
     def pop_right(self) -> Any:
-        return self.queue.pop() if len(self.queue) > 0 else None
+        self.lock.acquire()
+        result = self.queue.pop() if len(self.queue) > 0 else None
+        self.lock.release()
+        return result
 
     def pop_left(self) -> Any:
-        return self.queue.popleft() if len(self.queue) > 0 else None
+        self.lock.acquire()
+        result = self.queue.popleft() if len(self.queue) > 0 else None
+        self.lock.release()
+        return result
 
-    def len(self) -> int:
-        return len(self.queue)
+    def __len__(self) -> int:
+        self.lock.acquire()
+        length = len(self.queue)
+        self.lock.release()
+        return length
 
 
 class HTTPReceiver(IDataReceiver, ABC):
@@ -82,17 +112,20 @@ class SocketReceiver(IDataReceiver, ABC):
     block_size: int
 
     is_running: bool
+    is_send_confirmation: bool
+    confirmation_msg: bytes
     socket_thread: Thread
-    data_lock: threading.Lock
 
-    def __init__(self, maxlen: int = None, port: int = 8001, end_character: bytes = b'\03', block_size: int = 4096):
+    def __init__(self, maxlen: int = None, port: int = 8001, end_character: bytes = b'\03', block_size: int = 4096,
+                 is_send_confirmation: bool = False, confirmation_msg: bytes = b''):
         super().__init__(maxlen, port)
         self.end_character = end_character
         self.block_size = block_size
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
         self.is_running = False
-        self.data_lock = threading.Lock()
+        self.is_send_confirmation = is_send_confirmation
+        self.confirmation_msg = confirmation_msg
 
     def start(self) -> None:
         self.is_running = True
@@ -104,6 +137,7 @@ class SocketReceiver(IDataReceiver, ABC):
 
         print('Socket client from ' + str(addr) + ' is connected on port: ' + str(self.port))
         self.socket_thread = Thread(target=self.__start_socket_thread, args=(conn,))
+        self.socket_thread.start()
 
     def stop(self) -> None:
         self.is_running = False
@@ -117,10 +151,10 @@ class SocketReceiver(IDataReceiver, ABC):
             end_index = data.find(self.end_character)
             if end_index != -1:
                 msg += data[:end_index]
-                self.data_lock.locked()
                 self.add(msg)
-                self.data_lock.release()
                 msg = data[end_index + len(self.end_character):]
+                if self.is_send_confirmation:
+                    conn.send(self.confirmation_msg)
             else:
                 msg += data
 
